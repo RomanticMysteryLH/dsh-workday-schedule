@@ -18,6 +18,14 @@
     "节假日",
     "工作日"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RomanticMysteryLH/dsh-workday-schedule.git"
+  },
+  "homepage": "https://github.com/RomanticMysteryLH/dsh-workday-schedule#readme",
+  "bugs": {
+    "url": "https://github.com/RomanticMysteryLH/dsh-workday-schedule/issues"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
