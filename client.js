@@ -2706,7 +2706,7 @@ window.__ModuleLoader__.load({
 
           fields.push(h('div', { key: 'f-title' },
             renderField('任务名称', renderInput(form.title, function (value) { patchForm({ title: value }) },
-              { placeholder: '例如：发日报' }), { required: true })))
+              { placeholder: '例如：汇总今天的告警' }), { required: true })))
           fields.push(h('div', { key: 'f-suffix' }, renderSuffixHint()))
           fields.push(h('div', { key: 'f-prompt' },
             renderField('任务内容', renderInput(form.prompt, function (value) { patchForm({ prompt: value }) },
