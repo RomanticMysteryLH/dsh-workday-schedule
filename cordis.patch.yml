@@ -1,0 +1,11 @@
+- insert:
+    - id: workday-schedule
+      name: dsh-workday-schedule
+      config:
+        weekdays: [1, 2, 3, 4, 5]
+        skipHolidays: true
+        runOnMakeupWorkdays: true
+        fallbackWhenUnknown: run
+        timeZone: Asia/Shanghai
+        autoUpdate: true
+        updateIntervalHours: 12

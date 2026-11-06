@@ -1,0 +1,54 @@
+{
+  "name": "dsh-workday-schedule",
+  "version": "0.3.0",
+  "description": "Workday-aware scheduling for DeepSeek Harness: run automation tasks on real working days, skip China statutory holidays, honour 调休 make-up workdays, and compose rules like \"the 2nd working day after a break\".",
+  "type": "module",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "schedule",
+    "scheduler",
+    "workday",
+    "holiday",
+    "chinese-holidays",
+    "tiaoxiu",
+    "调休",
+    "节假日",
+    "工作日"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "src/*.js",
+    "src/seed-holidays.json",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/rule.test.mjs test/engine.smoke.mjs test/plan.test.mjs test/holiday-seed.test.mjs",
+    "build:seed": "node scripts/build-seed.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

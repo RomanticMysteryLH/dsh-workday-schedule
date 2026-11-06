@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Workday Schedule",
+    "description": "Gives automation tasks holiday and make-up-workday rules: run only on configured weekdays, skip China statutory holidays, and still run on 调休 make-up workdays."
+  }
+}
