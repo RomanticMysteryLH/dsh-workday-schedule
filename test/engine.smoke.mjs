@@ -665,3 +665,44 @@ test('marker: a composable rule gets its own title suffix and is never adopted b
   assert.equal(adopted.dayKind, 'rule')
   await rm(dir, { recursive: true, force: true })
 })
+
+test('report: the delivered prompt is untouched when the flag is off', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wds-'))
+  const calendar = new HolidayCalendar({ dataDir: dir, seedPath })
+  await calendar.whenReady()
+  const store = new TaskStore({ dataDir: dir })
+  await store.load()
+  const ctx = { schedule: scheduleNew(), logger: { warn() {}, log() {} } }
+  const engine = new WorkdayEngine({ ctx, config, calendar, store, logger: ctx.logger })
+  const prompt = '原始任务内容，一个字都不该变'
+  const task = store.add(makeTask({ prompt }))
+  await store.save()
+  await engine.tick()
+
+  const row = [...ctx.schedule.rows.values()][0]
+  assert.equal(row.record.prompt ?? row.prompt, prompt, 'delivered prompt must be exactly the user text')
+  assert.equal(store.get(task.id).reportAfterRun, undefined)
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('report: enabling the flag appends the report request only', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wds-'))
+  const calendar = new HolidayCalendar({ dataDir: dir, seedPath })
+  await calendar.whenReady()
+  const store = new TaskStore({ dataDir: dir })
+  await store.load()
+  const ctx = { schedule: scheduleNew(), logger: { warn() {}, log() {} } }
+  const engine = new WorkdayEngine({ ctx, config, calendar, store, logger: ctx.logger })
+  const prompt = '我的任务内容'
+  const task = store.add(makeTask({ prompt, reportAfterRun: true }))
+  await store.save()
+  await engine.tick()
+
+  const delivered = [...ctx.schedule.rows.values()][0]
+  const text = delivered.record.prompt ?? delivered.prompt
+  assert.ok(text.startsWith(prompt), 'user text must stay first and unchanged')
+  assert.match(text, /【完成后请汇报】/)
+  assert.match(text, /成功 \/ 部分成功 \/ 失败/)
+  assert.equal(engine.preview(store.get(task.id)).reportAfterRun, true)
+  await rm(dir, { recursive: true, force: true })
+})

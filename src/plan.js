@@ -139,6 +139,7 @@ export function buildPlan(input) {
       // Present only for a composable rule, so the page can show which selectors are set.
       selectors: Array.isArray(task.selectors) && task.selectors.length > 0 ? task.selectors : null,
       ruleText: describeRule(task),
+      reportAfterRun: task.reportAfterRun === true,
       // The page lists tasks from the native catalog, whose ids differ from these task
       // ids, so it needs the native record ids to colour a row with the same colour the
       // calendar uses for the same task.

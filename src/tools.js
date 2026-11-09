@@ -82,6 +82,7 @@ export function buildTools(deps) {
           skip_holidays: { type: 'boolean', description: 'Skip China statutory holidays. Defaults to true.' },
           run_on_makeup_workdays: { type: 'boolean', description: 'Also run on 调休 make-up workdays that fall on a weekend. Defaults to true.' },
           session_id: { type: 'string', description: 'Bind delivery to this existing session instead of the current one. Use only to migrate an existing automation task whose session differs.' },
+          report_after_run: { type: 'boolean', description: 'Append a short post-run report request to the delivered prompt. Defaults to false: the delivered prompt is then exactly your text.' },
           rule: { type: 'array', items: { type: 'object' }, description: 'Composable rule: array of selectors {dayType: workday|restday, anchor: stretch|week|month, ordinals: [..], every}. Overrides day_kind/weekdays. Example: [{dayType:workday,anchor:stretch,ordinals:[2,3]},{dayType:restday,anchor:stretch,ordinals:[1]}].' },
           day_kind: { type: 'string', enum: ['workday', 'restday', 'restday-first'], description: 'workday (default) runs on working days; restday runs on weekends and statutory holidays and never on a 调休 make-up workday; restday-first runs only on the FIRST day of a rest stretch, for jobs that process the work stretch that just ended.' },
         },
@@ -117,6 +118,7 @@ export function buildTools(deps) {
           dayKind: normalizeDayKind(args.day_kind),
           weekdays,
           selectors,
+          reportAfterRun: args.report_after_run === true,
           skipHolidays: args.skip_holidays !== false,
           runOnMakeupWorkdays: args.run_on_makeup_workdays !== false,
           sessionId: targetSessionId,
@@ -163,6 +165,7 @@ export function buildTools(deps) {
           skip_holidays: { type: 'boolean' },
           run_on_makeup_workdays: { type: 'boolean' },
           enabled: { type: 'boolean', description: 'false pauses the task and removes its armed reminder.' },
+          report_after_run: { type: 'boolean', description: 'Append a short post-run report request to the delivered prompt.' },
           day_kind: { type: 'string', enum: ['workday', 'restday', 'restday-first'], description: 'workday runs on working days; restday runs on weekends and statutory holidays; restday-first runs only on the first day of a rest stretch.' },
         },
         required: ['id'],
@@ -190,6 +193,9 @@ export function buildTools(deps) {
         if (args.enabled !== undefined) {
           patch.enabled = args.enabled !== false
           patch.disabledReason = patch.enabled ? null : 'paused-by-user'
+        }
+        if (args.report_after_run !== undefined) {
+          patch.reportAfterRun = args.report_after_run === true
         }
         if (args.day_kind !== undefined) {
           if (!DAY_KINDS.includes(args.day_kind)) {

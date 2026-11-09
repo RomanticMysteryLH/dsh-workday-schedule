@@ -447,6 +447,37 @@ window.__ModuleLoader__.load({
         border: '1px solid ' + C.border,
         background: C.surface,
       },
+      checkboxRow: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '4px 2px',
+        background: 'transparent',
+        border: 'none',
+        color: 'inherit',
+        font: 'inherit',
+        fontSize: 13,
+        cursor: 'pointer',
+        textAlign: 'left',
+      },
+      checkboxOn: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        fontSize: 11,
+        lineHeight: 1,
+        border: '1px solid ' + C.accentBorder,
+        background: C.accentBg,
+      },
+      checkboxOff: {
+        width: 16,
+        height: 16,
+        borderRadius: 4,
+        border: '1px solid ' + C.border,
+      },
       // ── 执行记录 ──
       historySummary: {
         marginBottom: 12,
@@ -1343,6 +1374,7 @@ window.__ModuleLoader__.load({
         date: todayInShanghai(),
         weekdays: WORKDAYS.slice(),
         cron: '30 13 * * 1-5',
+        reportAfterRun: false,
         selectors: [{ dayType: 'workday', anchor: 'stretch', ordinals: '1', every: '1' }],
       }
     }
@@ -1788,6 +1820,7 @@ window.__ModuleLoader__.load({
           // A task the Host owns carries a composable rule; backfill it so the editor can
           // show and modify the selectors instead of silently flattening them.
           var hostTask = findHostTask(entry)
+          if (hostTask) next.reportAfterRun = hostTask.reportAfterRun === true
           if (hostTask && Array.isArray(hostTask.selectors) && hostTask.selectors.length > 0) {
             next.repeat = 'rule'
             next.selectors = hostTask.selectors.map(function (selector) {
@@ -1916,13 +1949,16 @@ window.__ModuleLoader__.load({
           setFormError('')
           setNotice(null)
 
-          // A composable rule lives in the Host, not in a native timing record, so it
-          // takes the task API instead of the Schedule one.
-          if (checked.selectors !== undefined) {
+          // Host-managed recurrence (工作日 / 休息日 / 节假日第一天 / 组合规则) goes through
+          // the task API, because the reported-after-run flag and a composable rule both
+          // live in the task store, not in a native timing record.
+          var hostOwned = checked.selectors !== undefined ||
+            (form.repeat === 'workday' || form.repeat === 'restday' || form.repeat === 'restday-first')
+          if (hostOwned) {
             var host = runtime.api
             if (!host || typeof host.createTask !== 'function') {
               setSaving(false)
-              setFormError('规划接口不可用，无法保存组合规则任务')
+              setFormError('规划接口不可用，无法保存这类任务')
               return
             }
             var hostTask = editing ? findHostTask(editing) : null
@@ -1931,7 +1967,15 @@ window.__ModuleLoader__.load({
               prompt: checked.prompt,
               time: form.time,
               sessionId: checked.sessionId,
-              selectors: checked.selectors,
+              reportAfterRun: form.reportAfterRun === true,
+            }
+            if (checked.selectors !== undefined) {
+              payload.selectors = checked.selectors
+            } else {
+              // A simple recurrence still needs its rule to survive the round trip.
+              payload.selectors = null
+              payload.dayKind = form.repeat
+              payload.weekdays = form.repeat === 'workday' ? [1, 2, 3, 4, 5] : [6, 7]
             }
             var action = hostTask
               ? Promise.resolve().then(function () { return host.updateTask({ id: hostTask.id, patch: payload }) })
@@ -2754,6 +2798,41 @@ window.__ModuleLoader__.load({
           )
         }
 
+        /**
+         * 「执行后汇报」开关。
+         *
+         * 打开后，插件只在投递内容末尾追加一段**固定格式的汇报要求** —— 约束「怎么汇报」，
+         * 不约束「做什么」。默认关闭，插件行为与不带这个功能时完全一致。
+         *
+         * 只在由 Host 托管的重复方式下出现：仅一次 / 每天 / 每周 / 自定义 这些走原生
+         * 记录，插件不参与投递内容，开关在那里打开了也不会生效，所以干脆不显示。
+         */
+        function renderReportToggle() {
+          var hostManaged = form.repeat === 'rule' || form.repeat === 'workday' ||
+            form.repeat === 'restday' || form.repeat === 'restday-first'
+          if (!hostManaged) return null
+          var on = form.reportAfterRun === true
+          return h(
+            'div',
+            { style: S.field },
+            h(
+              'button',
+              {
+                type: 'button',
+                style: assign({}, S.checkboxRow),
+                onClick: function () { patchForm({ reportAfterRun: !on }) },
+                'aria-pressed': on,
+              },
+              h('span', { style: on ? S.checkboxOn : S.checkboxOff }, on ? '✓' : ''),
+              h('span', null, '执行后汇报结果'),
+            ),
+            h('div', { style: S.hint },
+              on
+                ? '每次触发后，投递内容末尾会追加一句「用 3 行说明做了什么 / 结果如何 / 有无异常」。'
+                : '关闭时投递内容就是你写的原文，插件不做任何追加。'),
+          )
+        }
+
         function renderSuffixHint() {
           if (!form.repeat) return null
           if (form.repeat === 'rule') {
@@ -2814,6 +2893,7 @@ window.__ModuleLoader__.load({
             renderField('任务名称', renderInput(form.title, function (value) { patchForm({ title: value }) },
               { placeholder: '例如：汇总今天的告警' }), { required: true })))
           fields.push(h('div', { key: 'f-suffix' }, renderSuffixHint()))
+          fields.push(renderReportToggle())
           fields.push(h('div', { key: 'f-prompt' },
             renderField('任务内容', renderInput(form.prompt, function (value) { patchForm({ prompt: value }) },
               { multiline: true, placeholder: '每次触发时发送给模型的指令' }), { required: true })))

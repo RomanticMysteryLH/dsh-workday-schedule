@@ -45,6 +45,21 @@ const MARKER_RESTDAY = ' · 休息日'
 const MARKER_RESTDAY_FIRST = ' · 节假日首日'
 const MARKER_RULE = ' · 组合规则'
 
+/**
+ * Closing request appended when a task opts into `reportAfterRun`.
+ *
+ * It constrains the shape of the report only — never what the task does — so the plugin
+ * keeps its "no task convention" boundary.
+ */
+const REPORT_REQUEST = [
+  '【完成后请汇报】',
+  '用 3 行以内说明本次执行结果：',
+  '1. 做了什么（关键动作与数量）',
+  '2. 结果如何（成功 / 部分成功 / 失败）',
+  '3. 有无异常或需要人工接手的地方',
+  '不要复述过程，不要贴大段日志。',
+].join('\n')
+
 /** Engine that keeps the built-in Schedule in agreement with the task store. */
 export class WorkdayEngine {
   #running = false
@@ -183,8 +198,24 @@ export class WorkdayEngine {
    * @param {{kind: 'weekly'|'at', weekly?: any, at?: any}} timing Typed timing.
    * @returns {Promise<any>} Committed record or entry.
    */
+  /**
+   * Build the prompt delivered to the task's session.
+   *
+   * Only tasks with `reportAfterRun` get the closing request appended. It constrains how
+   * the run is reported, never what the task does, so the plugin still owns no task
+   * convention: turn the flag off and the delivered prompt is exactly the user's text.
+   * @param {any} task Task.
+   * @returns {string}
+   */
+  #promptFor(task) {
+    const base = String(task.prompt ?? '')
+    if (task.reportAfterRun !== true) return base
+    return `${base}\n\n${REPORT_REQUEST}`
+  }
+
   async #createRecord(schedule, task, timing) {
     const title = this.#titleFor(task)
+    const prompt = this.#promptFor(task)
     const modes = this.#createMode === undefined ? ['timing', 'legacy'] : [this.#createMode]
     let lastError
     for (const mode of modes) {
@@ -192,7 +223,7 @@ export class WorkdayEngine {
         if (mode === 'timing') {
           const entry = await schedule.create({
             title,
-            prompt: task.prompt,
+            prompt,
             timing,
             target: { kind: 'session', sessionId: task.sessionId },
           }, task.sessionId)
@@ -200,7 +231,7 @@ export class WorkdayEngine {
           return entry
         }
         const legacy = timing.kind === 'weekly' ? { weekly: timing.weekly } : { at: timing.at }
-        const record = await schedule.create(task.sessionId, { title, prompt: task.prompt, ...legacy })
+        const record = await schedule.create(task.sessionId, { title, prompt, ...legacy })
         this.#createMode = mode
         return record
       } catch (error) {
@@ -627,6 +658,7 @@ export class WorkdayEngine {
       nativeRecurring: this.#baseWeekdays(task),
       extraOneShots: (task.extras ?? []).map(extra => extra.date),
       pausedForHoliday: task.pausedFor ?? null,
+      reportAfterRun: task.reportAfterRun === true,
       disabledReason: task.disabledReason ?? null,
       lastArmError: task.lastArmError ?? null,
     }

@@ -259,6 +259,7 @@ export function apply(ctx, rawConfig) {
           dayKind: selectors === undefined ? normalizeDayKind(request?.dayKind) : 'workday',
           weekdays: Array.isArray(request?.weekdays) && request.weekdays.length > 0 ? request.weekdays : [1, 2, 3, 4, 5],
           selectors,
+          reportAfterRun: request?.reportAfterRun === true,
           skipHolidays: true,
           runOnMakeupWorkdays: true,
           sessionId,
@@ -304,6 +305,10 @@ export function apply(ctx, rawConfig) {
           }
         }
         if (incoming.dayKind !== undefined) patch.dayKind = normalizeDayKind(incoming.dayKind)
+        if (Array.isArray(incoming.weekdays) && incoming.weekdays.length > 0) {
+          patch.weekdays = incoming.weekdays.map(Number).filter(day => Number.isInteger(day) && day >= 1 && day <= 7)
+        }
+        if (incoming.reportAfterRun !== undefined) patch.reportAfterRun = incoming.reportAfterRun === true
         store.update(task.id, patch)
         await store.save()
         await engine.reconcile(task, Date.now())
