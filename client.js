@@ -448,6 +448,44 @@ window.__ModuleLoader__.load({
         background: C.surface,
       },
       // ── 执行记录 ──
+      historySummary: {
+        marginBottom: 12,
+      },
+      historyStatRow: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 10,
+      },
+      historyStat: {
+        flex: '1 1 130px',
+        minWidth: 0,
+        padding: '10px 12px',
+        borderRadius: 10,
+        border: '1px solid ' + C.border,
+        background: C.surfaceSoft,
+        boxSizing: 'border-box',
+      },
+      historyStatValue: {
+        fontSize: 20,
+        fontWeight: 600,
+        lineHeight: '26px',
+        fontVariantNumeric: 'tabular-nums',
+      },
+      historyChips: {
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 8,
+        marginTop: 10,
+      },
+      historyChip: {
+        display: 'inline-flex',
+        alignItems: 'center',
+        padding: '3px 10px',
+        borderRadius: 999,
+        border: '1px solid ' + C.border,
+        fontSize: 12,
+        opacity: 0.9,
+      },
       historyRow: {
         display: 'flex',
         alignItems: 'center',
@@ -2053,6 +2091,74 @@ window.__ModuleLoader__.load({
          * 这比「未来时间线」更有用 —— 未来哪天跑不跑，在月历上点开某天就能看到。
          * @returns {any} 页面区块。
          */
+        /**
+         * 执行记录的摘要小结。
+         *
+         * 流水只回答「哪次几点发的」，摘要回答「整体靠不靠谱」：跑了多少次、准不准时、
+         * 平均拖延多久、最近一次什么时候。数字都来自真实投递时刻，不做推算。
+         * @returns {any} 摘要节点，没有记录时为 null。
+         */
+        function renderHistorySummary() {
+          if (!historyItems.length) return null
+          var summary = historySummary(historyItems)
+          var latest = historyItems[0]
+          var total = historyItems.length
+          var rate = total === 0 ? 0 : Math.round((summary.onTime / total) * 100)
+          var worst = 0
+          for (var i = 0; i < historyItems.length; i += 1) {
+            var d = delaySeconds(historyItems[i].scheduledAt, historyItems[i].deliveredAt)
+            if (d !== null && d > worst) worst = d
+          }
+
+          // 按任务汇总次数，让「谁在跑」一眼可见。
+          var byTask = {}
+          for (var j = 0; j < historyItems.length; j += 1) {
+            var key = String(historyItems[j].title || '（未命名任务）')
+            byTask[key] = (byTask[key] || 0) + 1
+          }
+          var colorMap = nativeToTaskId()
+          var chips = Object.keys(byTask).map(function (name) {
+            var sample = historyItems.filter(function (item) { return String(item.title || '（未命名任务）') === name })[0]
+            return h(
+              'span',
+              { key: name, style: S.historyChip },
+              h('span', {
+                style: assign({}, S.dot, {
+                  background: entryColor({ id: sample.id, title: sample.title }, colorMap),
+                  display: 'inline-block',
+                  marginRight: 6,
+                }),
+              }),
+              name + ' × ' + byTask[name],
+            )
+          })
+
+          var cell = function (label, value, foot) {
+            return h(
+              'div',
+              { key: label, style: S.historyStat },
+              h('div', { style: S.statLabel }, label),
+              h('div', { style: S.historyStatValue }, value),
+              foot ? h('div', { style: S.statFoot }, foot) : null,
+            )
+          }
+
+          return h(
+            'div',
+            { style: S.historySummary },
+            h(
+              'div',
+              { style: S.historyStatRow },
+              cell('执行次数', String(total), '最近 ' + HISTORY_ROW_LIMIT + ' 次内'),
+              cell('准时率', rate + '%', summary.onTime + ' / ' + total + ' 次准时'),
+              cell('平均延迟', summary.avgDelaySeconds === null ? '—' : summary.avgDelaySeconds + 's',
+                worst > 0 ? '最慢 ' + worst + 's' : '全部准点'),
+              cell('最近一次', formatShanghai(latest.deliveredAt) || '—', String(latest.title || '')),
+            ),
+            chips.length > 0 ? h('div', { style: S.historyChips }, chips) : null,
+          )
+        }
+
         function renderHistory() {
           var summary = historySummary(historyItems)
           var head = h(
@@ -2099,7 +2205,7 @@ window.__ModuleLoader__.load({
             }))
           }
 
-          return h('div', { style: S.card }, head, body)
+          return h('div', { style: S.card }, head, renderHistorySummary(), body)
         }
         //#endregion
 
