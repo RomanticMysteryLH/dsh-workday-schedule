@@ -48,16 +48,18 @@ const MARKER_RULE = ' · 组合规则'
 /**
  * Closing request appended when a task opts into `reportAfterRun`.
  *
- * It constrains the shape of the report only — never what the task does — so the plugin
- * keeps its "no task convention" boundary.
+ * The report goes to `workday_task_report`, not into the chat, so the task page's
+ * execution records carry the outcome. It constrains the shape of the report only —
+ * never what the task does — so the plugin keeps its "no task convention" boundary.
  */
 const REPORT_REQUEST = [
-  '【完成后请汇报】',
-  '用 3 行以内说明本次执行结果：',
-  '1. 做了什么（关键动作与数量）',
-  '2. 结果如何（成功 / 部分成功 / 失败）',
-  '3. 有无异常或需要人工接手的地方',
-  '不要复述过程，不要贴大段日志。',
+  '【完成后请记录结果】',
+  '本次执行末尾调用一次 workday_task_report 工具，把结果写进任务面板的执行记录：',
+  '- id：本任务的 id（见任务标题下方或 workday_task_list）',
+  '- summary：一句话说明做了什么、结果如何（不超过 60 字）',
+  '- status：ok / partial / failed / skipped 之一',
+  '- detail：可选，最多几行，写需要人接手的地方',
+  '不要在对话里复述过程，也不要贴大段日志。',
 ].join('\n')
 
 /** Engine that keeps the built-in Schedule in agreement with the task store. */

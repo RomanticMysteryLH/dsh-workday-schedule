@@ -69,4 +69,33 @@ export class TaskStore {
     this.tasks = this.tasks.filter(t => t.id !== id)
     return this.tasks.length !== before
   }
+
+  /**
+   * Append one run report to a task, keeping a bounded history.
+   *
+   * Reports are written by the task itself through `workday_task_report`, so the record
+   * of what happened comes from the run that did the work rather than from a guess here.
+   * @param {string} id Task id.
+   * @param {{at?: string, status?: string, summary: string, detail?: string}} report Report payload.
+   * @param {number} keep Maximum reports retained per task.
+   * @returns {any|undefined} The stored report, or undefined when the task is unknown.
+   */
+  addReport(id, report, keep = 50) {
+    const task = this.get(id)
+    if (task === undefined) return undefined
+    const stored = {
+      id: report.id ?? `r-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`,
+      at: typeof report.at === 'string' && report.at !== '' ? report.at : new Date().toISOString(),
+      status: typeof report.status === 'string' ? report.status : 'ok',
+      summary: String(report.summary ?? '').slice(0, 500),
+      detail: typeof report.detail === 'string' ? report.detail.slice(0, 4000) : undefined,
+    }
+    const reports = Array.isArray(task.reports) ? task.reports.slice() : []
+    // Replace a report with the same identity so a retried call does not duplicate.
+    const existing = reports.findIndex(entry => entry.id === stored.id)
+    if (existing >= 0) reports.splice(existing, 1)
+    reports.push(stored)
+    this.update(id, { reports: reports.slice(-keep) })
+    return stored
+  }
 }

@@ -701,8 +701,40 @@ test('report: enabling the flag appends the report request only', async () => {
   const delivered = [...ctx.schedule.rows.values()][0]
   const text = delivered.record.prompt ?? delivered.prompt
   assert.ok(text.startsWith(prompt), 'user text must stay first and unchanged')
-  assert.match(text, /【完成后请汇报】/)
-  assert.match(text, /成功 \/ 部分成功 \/ 失败/)
+  assert.match(text, /【完成后请记录结果】/)
+  assert.match(text, /workday_task_report/)
   assert.equal(engine.preview(store.get(task.id)).reportAfterRun, true)
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('report tool: a task records its own run outcome', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wds-'))
+  const calendar = new HolidayCalendar({ dataDir: dir, seedPath })
+  await calendar.whenReady()
+  const store = new TaskStore({ dataDir: dir })
+  await store.load()
+  const ctx = { schedule: scheduleNew(), logger: { warn() {}, log() {} } }
+  const engine = new WorkdayEngine({ ctx, config, calendar, store, logger: ctx.logger })
+  const task = store.add(makeTask())
+  await store.save()
+  await engine.tick()
+
+  const stored = store.addReport(task.id, { at: '2026-11-07T02:00:05Z', status: 'partial', summary: '填了 4 天，周五缺权限' })
+  assert.ok(stored && stored.id)
+  assert.equal(store.get(task.id).reports.length, 1)
+  assert.equal(store.get(task.id).reports[0].status, 'partial')
+  assert.match(store.get(task.id).reports[0].summary, /周五缺权限/)
+
+  // A repeat with the same identity must not duplicate the row.
+  store.addReport(task.id, { id: stored.id, summary: '重试后的结果' })
+  assert.equal(store.get(task.id).reports.length, 1)
+  await rm(dir, { recursive: true, force: true })
+})
+
+test('report tool: an unknown task is rejected instead of silently dropped', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'wds-'))
+  const store = new TaskStore({ dataDir: dir })
+  await store.load()
+  assert.equal(store.addReport('nope', { summary: 'x' }), undefined)
   await rm(dir, { recursive: true, force: true })
 })

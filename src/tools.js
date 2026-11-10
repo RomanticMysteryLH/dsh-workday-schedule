@@ -225,6 +225,38 @@ export function buildTools(deps) {
     },
 
     {
+      name: 'workday_task_report',
+      description: 'Record the outcome of one run of a workday task, so the task page shows what happened instead of only when it fired. Call it once at the end of a run.',
+      parameters: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Task id from workday_task_list.' },
+          summary: { type: 'string', description: 'One sentence on what this run did and whether it worked. Shown as the row summary.' },
+          status: { type: 'string', enum: ['ok', 'partial', 'failed', 'skipped'], description: 'ok = done, partial = partly done, failed = did not work, skipped = refused on purpose.' },
+          detail: { type: 'string', description: 'Optional extra detail, a few lines at most.' },
+          at: { type: 'string', description: 'ISO instant of the run. Defaults to now.' },
+        },
+        required: ['id', 'summary'],
+      },
+      output: OUTPUT,
+      timeoutMs: 20000,
+      async execute(args) {
+        const task = store.get(String(args.id))
+        if (task === undefined) return { ok: false, error: 'not-found', message: `No task with id ${args.id}.` }
+        const summary = String(args.summary ?? '').trim()
+        if (summary === '') return { ok: false, error: 'empty-summary', message: 'summary must not be empty.' }
+        const report = store.addReport(task.id, {
+          at: args.at,
+          status: args.status,
+          summary,
+          detail: args.detail,
+        })
+        await store.save()
+        return { ok: true, report }
+      },
+    },
+
+    {
       name: 'workday_task_delete',
       description: 'Delete a workday-aware scheduled task together with its armed reminder.',
       parameters: {

@@ -479,6 +479,28 @@ window.__ModuleLoader__.load({
         border: '1px solid ' + C.border,
       },
       // ── 执行记录 ──
+      historyBlock: {
+        borderTop: '1px solid ' + C.border,
+      },
+      historyResult: {
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: '0 2px 8px 16px',
+        fontSize: 12.5,
+      },
+      resultBadge: {
+        flex: 'none',
+        padding: '1px 8px',
+        borderRadius: 999,
+        fontSize: 11,
+        lineHeight: '16px',
+      },
+      resultText: {
+        minWidth: 0,
+        opacity: 0.92,
+        lineHeight: '18px',
+      },
       historySummary: {
         marginBottom: 12,
       },
@@ -978,6 +1000,22 @@ window.__ModuleLoader__.load({
       try {
         return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
       } catch (err) { return 'dark' }
+    }
+
+    /** 结果状态的中文标签。 */
+    function resultStatusLabel(status) {
+      if (status === 'partial') return '部分完成'
+      if (status === 'failed') return '失败'
+      if (status === 'skipped') return '跳过'
+      return '完成'
+    }
+
+    /** 结果状态的配色。 */
+    function resultStatusTone(status) {
+      if (status === 'failed') return { border: '1px solid ' + C.dangerBorder, background: C.dangerBg }
+      if (status === 'partial') return { border: '1px solid ' + C.warnBorder, background: C.warnBg }
+      if (status === 'skipped') return { border: '1px solid ' + C.border, background: C.surface }
+      return { border: '1px solid ' + C.okBorder, background: C.okBg }
     }
 
     /**
@@ -1494,9 +1532,13 @@ window.__ModuleLoader__.load({
         var view = viewState[0]
         var setView = viewState[1]
 
+        // latest plan for callbacks that must not re-create on every plan change
+        var planRef = React.useRef(null)
+
         var planState = React.useState(null)
         var plan = planState[0]
         var setPlan = planState[1]
+        planRef.current = plan
 
         var planStatusState = React.useState('loading')
         var planStatus = planStatusState[0]
@@ -1701,7 +1743,8 @@ window.__ModuleLoader__.load({
             merged.sort(function (a, b) {
               return String(b.deliveredAt || '').localeCompare(String(a.deliveredAt || ''))
             })
-            setHistoryItems(merged.slice(0, HISTORY_ROW_LIMIT))
+            // Results are attached after the plan is known, because they live on the task.
+            setHistoryItems(attachResults(merged.slice(0, HISTORY_ROW_LIMIT), planRef.current))
             setHistoryStatus('ready')
             setHistoryError('')
           }).catch(function (err) {
@@ -1709,6 +1752,12 @@ window.__ModuleLoader__.load({
             setHistoryError(describeError(err))
           })
         }, [])
+
+        React.useEffect(function () {
+          // Results live on the task, so they can only be attached once the plan arrived.
+          // Re-attaching on plan changes keeps an early history fetch from losing them.
+          setHistoryItems(function (items) { return items.length ? attachResults(items, plan) : items })
+        }, [plan])
 
         React.useEffect(function () {
           // Only a composable rule needs a preview; the simple modes are self-evident.
@@ -2203,6 +2252,44 @@ window.__ModuleLoader__.load({
           )
         }
 
+        /**
+         * 把任务自己写的结果挂到对应的投递行上。
+         *
+         * 投递时刻和结果写入时刻不是同一个瞬间（任务要跑完才写），所以按「结果时刻不早于
+         * 投递时刻，且早于下一条投递」来配对：一次执行对应它在跑完之后写下的那条结果。
+         * @param {any[]} items 投递记录（已按时间倒序）。
+         * @returns {any[]} 每行带上 result 字段的记录。
+         */
+        function attachResults(items, source) {
+          var tasks = (source && source.tasks) || []
+          var byNative = {}
+          for (var i = 0; i < tasks.length; i += 1) {
+            var ids = tasks[i].nativeIds || []
+            for (var j = 0; j < ids.length; j += 1) byNative[ids[j]] = tasks[i]
+          }
+          // 正序处理，才能判断「下一条投递」的边界。
+          var asc = items.slice().sort(function (a, b) {
+            return String(a.deliveredAt || '').localeCompare(String(b.deliveredAt || ''))
+          })
+          var out = []
+          for (var k = 0; k < asc.length; k += 1) {
+            var row = asc[k]
+            var hostTask = byNative[row.id]
+            var result = null
+            if (hostTask && Array.isArray(hostTask.reports)) {
+              var from = Date.parse(row.deliveredAt)
+              var until = k + 1 < asc.length ? Date.parse(asc[k + 1].deliveredAt) : Infinity
+              for (var r = 0; r < hostTask.reports.length; r += 1) {
+                var at = Date.parse(hostTask.reports[r].at)
+                if (!isFinite(at) || !isFinite(from)) continue
+                if (at >= from && at < until) result = hostTask.reports[r]
+              }
+            }
+            out.push(assign({}, row, { result: result }))
+          }
+          return out.reverse()
+        }
+
         function renderHistory() {
           var summary = historySummary(historyItems)
           var head = h(
@@ -2228,23 +2315,40 @@ window.__ModuleLoader__.load({
             body = h('div', null, historyItems.map(function (item, index) {
               var delay = delaySeconds(item.scheduledAt, item.deliveredAt)
               var onTime = delay !== null && delay <= 60
+              var result = item.result || null
               return h(
                 'div',
-                { key: item.messageId || (item.id + '-' + index), style: S.historyRow },
-                h('span', {
-                  style: assign({}, S.dot, {
-                    background: entryColor({ id: item.id, title: item.title }, colorMap),
-                    display: 'inline-block',
-                    marginRight: 8,
+                { key: item.messageId || (item.id + '-' + index), style: S.historyBlock },
+                h(
+                  'div',
+                  { style: S.historyRow },
+                  h('span', {
+                    style: assign({}, S.dot, {
+                      background: entryColor({ id: item.id, title: item.title }, colorMap),
+                      display: 'inline-block',
+                      marginRight: 8,
+                    }),
                   }),
-                }),
-                h('span', { style: S.historyWhen }, formatShanghai(item.deliveredAt) || '—'),
-                h('span', { style: S.detailTitle }, String(item.title || '（未命名任务）')),
-                h('span', {
-                  style: assign({}, S.historyTag, onTime
-                    ? { border: '1px solid ' + C.okBorder, background: C.okBg }
-                    : { border: '1px solid ' + C.warnBorder, background: C.warnBg }),
-                }, onTime ? '准时' : (delay === null ? '时间未知' : '延迟 ' + delay + 's')),
+                  h('span', { style: S.historyWhen }, formatShanghai(item.deliveredAt) || '—'),
+                  h('span', { style: S.detailTitle }, String(item.title || '（未命名任务）')),
+                  h('span', {
+                    style: assign({}, S.historyTag, onTime
+                      ? { border: '1px solid ' + C.okBorder, background: C.okBg }
+                      : { border: '1px solid ' + C.warnBorder, background: C.warnBg }),
+                  }, onTime ? '准时' : (delay === null ? '时间未知' : '延迟 ' + delay + 's')),
+                ),
+                // The outcome line the task wrote for this run. Nothing is invented here:
+                // no report means no line, rather than a placeholder that claims success.
+                result
+                  ? h(
+                    'div',
+                    { style: S.historyResult },
+                    h('span', {
+                      style: assign({}, S.resultBadge, resultStatusTone(result.status)),
+                    }, resultStatusLabel(result.status)),
+                    h('span', { style: S.resultText }, String(result.summary || '')),
+                  )
+                  : null,
               )
             }))
           }
